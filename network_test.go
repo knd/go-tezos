@@ -2,271 +2,405 @@ package gotezos
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"testing"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
 )
 
-var _ = Describe("Versions", func() {
-	It("returns rpc error", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(versionsHandlerMock(mockRPCError, blankHandler)))
-		defer server.Close()
+func Test_Versions(t *testing.T) {
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+	var goldenVersions Versions
+	json.Unmarshal(mockVersions, &goldenVersions)
 
-		versions, err := gt.Versions()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not get network versions"))
-		Expect(versions).To(Equal(Versions{}))
-	})
+	type want struct {
+		wantErr      bool
+		containsErr  string
+		wantVersions Versions
+	}
 
-	It("fails to unmarshal", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(versionsHandlerMock([]byte(`junk`), blankHandler)))
-		defer server.Close()
+	cases := []struct {
+		name        string
+		inputHanler http.Handler
+		want
+	}{
+		{
+			"returns rpc error",
+			gtGoldenHTTPMock(versionsHandlerMock(mockRPCError, blankHandler)),
+			want{
+				true,
+				"could not get network versions",
+				Versions{},
+			},
+		},
+		{
+			"fails to unmarshal",
+			gtGoldenHTTPMock(versionsHandlerMock([]byte(`junk`), blankHandler)),
+			want{
+				true,
+				"could not unmarshal network versions",
+				Versions{},
+			},
+		},
+		{
+			"is successful",
+			gtGoldenHTTPMock(versionsHandlerMock(mockVersions, blankHandler)),
+			want{
+				false,
+				"",
+				goldenVersions,
+			},
+		},
+	}
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.inputHanler)
+			defer server.Close()
 
-		versions, err := gt.Versions()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not unmarshal network versions"))
-		Expect(versions).To(Equal(Versions{}))
-	})
+			gt, err := New(server.URL)
+			assert.Nil(t, err)
 
-	It("is successful", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(versionsHandlerMock(mockVersions, blankHandler)))
-		defer server.Close()
+			versions, err := gt.Versions()
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				assert.Contains(t, err.Error(), tt.want.containsErr)
+			} else {
+				assert.Nil(t, err)
+			}
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+			assert.Equal(t, tt.want.wantVersions, versions)
+		})
+	}
+}
 
-		var want Versions
-		json.Unmarshal(mockVersions, &want)
+func Test_Constants(t *testing.T) {
 
-		versions, err := gt.Versions()
-		Expect(err).To(Succeed())
-		Expect(versions).To(Equal(want))
-	})
-})
+	var goldenConstants Constants
+	json.Unmarshal(mockConstants, &goldenConstants)
 
-var _ = Describe("Constants", func() {
-	var mock constantsMock
+	mock := constantsMock{}
 
-	BeforeEach(func() {
-		mock = constantsMock{}
-	})
-	It("returns rpc error", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(mock.handler(mockRPCError, blankHandler)))
-		defer server.Close()
+	type want struct {
+		wantErr       bool
+		containsErr   string
+		wantConstants Constants
+	}
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+	cases := []struct {
+		name        string
+		inputHanler http.Handler
+		want
+	}{
+		{
+			"returns rpc error",
+			gtGoldenHTTPMock(mock.handler(mockRPCError, blankHandler)),
+			want{
+				true,
+				"could not get network constants",
+				Constants{},
+			},
+		},
+		{
+			"fails to unmarshal",
+			gtGoldenHTTPMock(mock.handler([]byte(`junk`), blankHandler)),
+			want{
+				true,
+				"could not unmarshal network versions",
+				Constants{},
+			},
+		},
+		{
+			"is successful",
+			gtGoldenHTTPMock(mock.handler(mockConstants, blankHandler)),
+			want{
+				false,
+				"",
+				goldenConstants,
+			},
+		},
+	}
 
-		constants, err := gt.Constants("BLzGD63HA4RP8Fh5xEtvdQSMKa2WzJMZjQPNVUc4Rqy8Lh5BEY1")
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not get network constants"))
-		Expect(constants).To(Equal(Constants{}))
-	})
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.inputHanler)
+			defer server.Close()
 
-	It("fails to unmarshal", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(mock.handler([]byte(`junk`), blankHandler)))
-		defer server.Close()
+			gt, err := New(server.URL)
+			assert.Nil(t, err)
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+			constants, err := gt.Constants("BLzGD63HA4RP8Fh5xEtvdQSMKa2WzJMZjQPNVUc4Rqy8Lh5BEY1")
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				assert.Contains(t, err.Error(), tt.want.containsErr)
+			} else {
+				assert.Nil(t, err)
+			}
 
-		constants, err := gt.Constants("BLzGD63HA4RP8Fh5xEtvdQSMKa2WzJMZjQPNVUc4Rqy8Lh5BEY1")
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not unmarshal network constants"))
-		Expect(constants).To(Equal(Constants{}))
-	})
+			assert.Equal(t, tt.want.wantConstants, constants)
+		})
+	}
+}
 
-	It("is successful", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(mock.handler(mockConstants, blankHandler)))
-		defer server.Close()
+func Test_ChainID(t *testing.T) {
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+	var goldenChainID string
+	json.Unmarshal(mockChainID, &goldenChainID)
 
-		var want Constants
-		json.Unmarshal(mockConstants, &want)
+	type want struct {
+		wantErr     bool
+		containsErr string
+		wantChainID string
+	}
 
-		constants, err := gt.Constants("BLzGD63HA4RP8Fh5xEtvdQSMKa2WzJMZjQPNVUc4Rqy8Lh5BEY1")
-		Expect(err).To(Succeed())
-		Expect(constants).To(Equal(want))
-	})
-})
+	cases := []struct {
+		name        string
+		inputHanler http.Handler
+		want
+	}{
+		{
+			"returns rpc error",
+			gtGoldenHTTPMock(chainIDHandlerMock(mockRPCError, blankHandler)),
+			want{
+				true,
+				"could not get chain id",
+				"",
+			},
+		},
+		{
+			"fails to unmarshal",
+			gtGoldenHTTPMock(chainIDHandlerMock([]byte(`junk`), blankHandler)),
+			want{
+				true,
+				"could unmarshal chain id",
+				"",
+			},
+		},
+		{
+			"is successful",
+			gtGoldenHTTPMock(chainIDHandlerMock(mockChainID, blankHandler)),
+			want{
+				false,
+				"",
+				goldenChainID,
+			},
+		},
+	}
 
-var _ = Describe("ChainID", func() {
-	It("returns rpc error", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(chainIDHandlerMock(mockRPCError, blankHandler)))
-		defer server.Close()
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.inputHanler)
+			defer server.Close()
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+			gt, err := New(server.URL)
+			assert.Nil(t, err)
 
-		chainID, err := gt.ChainID()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not get chain id"))
-		Expect(chainID).To(Equal(""))
-	})
+			chainID, err := gt.Constants("BLzGD63HA4RP8Fh5xEtvdQSMKa2WzJMZjQPNVUc4Rqy8Lh5BEY1")
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				assert.Contains(t, err.Error(), tt.want.containsErr)
+			} else {
+				assert.Nil(t, err)
+			}
 
-	It("fails to unmarshal", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(chainIDHandlerMock([]byte(`junk`), blankHandler)))
-		defer server.Close()
+			assert.Equal(t, tt.want.wantChainID, chainID)
+		})
+	}
+}
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+func Test_Connections(t *testing.T) {
 
-		chainID, err := gt.ChainID()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could unmarshal chain id"))
-		Expect(chainID).To(Equal(""))
-	})
+	var goldenConnections Connections
+	json.Unmarshal(mockConnections, &goldenConnections)
 
-	It("is successful", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(chainIDHandlerMock(mockChainID, blankHandler)))
-		defer server.Close()
+	type want struct {
+		wantErr         bool
+		containsErr     string
+		wantConnections Connections
+	}
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+	cases := []struct {
+		name        string
+		inputHanler http.Handler
+		want
+	}{
+		{
+			"returns rpc error",
+			gtGoldenHTTPMock(connectionsHandlerMock(mockRPCError, blankHandler)),
+			want{
+				true,
+				"could not get network connections",
+				Connections{},
+			},
+		},
+		{
+			"fails to unmarshal",
+			gtGoldenHTTPMock(connectionsHandlerMock([]byte(`junk`), blankHandler)),
+			want{
+				true,
+				"could not unmarshal network connections",
+				Connections{},
+			},
+		},
+		{
+			"is successful",
+			gtGoldenHTTPMock(connectionsHandlerMock(mockConnections, blankHandler)),
+			want{
+				false,
+				"",
+				goldenConnections,
+			},
+		},
+	}
 
-		var want string
-		json.Unmarshal(mockChainID, &want)
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.inputHanler)
+			defer server.Close()
 
-		chainID, err := gt.ChainID()
-		Expect(err).To(Succeed())
-		Expect(chainID).To(Equal(want))
-	})
-})
+			gt, err := New(server.URL)
+			assert.Nil(t, err)
 
-var _ = Describe("Connections", func() {
-	It("returns rpc error", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(connectionsHandlerMock(mockRPCError, blankHandler)))
-		defer server.Close()
+			connections, err := gt.Connections()
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				assert.Contains(t, err.Error(), tt.want.containsErr)
+			} else {
+				assert.Nil(t, err)
+			}
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+			assert.Equal(t, tt.want.wantConnections, connections)
+		})
+	}
+}
 
-		connections, err := gt.Connections()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not get network connections"))
-		Expect(connections).To(Equal(Connections{}))
-	})
+func Test_Bootsrap(t *testing.T) {
+	var goldenBootstrap Bootstrap
+	json.Unmarshal(mockBootstrap, &goldenBootstrap)
 
-	It("fails to unmarshal", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(connectionsHandlerMock([]byte(`junk`), blankHandler)))
-		defer server.Close()
+	type want struct {
+		wantErr       bool
+		containsErr   string
+		wantBootstrap Bootstrap
+	}
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+	cases := []struct {
+		name        string
+		inputHanler http.Handler
+		want
+	}{
+		{
+			"returns rpc error",
+			gtGoldenHTTPMock(bootstrapHandlerMock(mockRPCError, blankHandler)),
+			want{
+				true,
+				"could not get bootstrap",
+				Bootstrap{},
+			},
+		},
+		{
+			"fails to unmarshal",
+			gtGoldenHTTPMock(bootstrapHandlerMock([]byte(`junk`), blankHandler)),
+			want{
+				true,
+				"could not unmarshal bootstrap",
+				Bootstrap{},
+			},
+		},
+		{
+			"is successful",
+			gtGoldenHTTPMock(bootstrapHandlerMock(mockBootstrap, blankHandler)),
+			want{
+				false,
+				"",
+				goldenBootstrap,
+			},
+		},
+	}
 
-		connections, err := gt.Connections()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not unmarshal network connections"))
-		Expect(connections).To(Equal(Connections{}))
-	})
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.inputHanler)
+			defer server.Close()
 
-	It("is successful", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(connectionsHandlerMock(mockConnections, blankHandler)))
-		defer server.Close()
+			gt, err := New(server.URL)
+			assert.Nil(t, err)
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+			bootstrap, err := gt.Bootstrap()
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				assert.Contains(t, err.Error(), tt.want.containsErr)
+			} else {
+				assert.Nil(t, err)
+			}
 
-		var want Connections
-		json.Unmarshal(mockConnections, &want)
+			assert.Equal(t, tt.want.wantBootstrap, bootstrap)
+		})
+	}
+}
 
-		connections, err := gt.Connections()
-		Expect(err).To(Succeed())
-		Expect(connections).To(Equal(want))
-	})
-})
+func Test_Commit(t *testing.T) {
+	var goldenCommit string
+	json.Unmarshal(mockCommit, &goldenCommit)
 
-var _ = Describe("Bootsrap", func() {
-	It("returns rpc error", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(bootstrapHandlerMock(mockRPCError, blankHandler)))
-		defer server.Close()
+	type want struct {
+		wantErr     bool
+		containsErr string
+		wantCommit  string
+	}
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+	cases := []struct {
+		name        string
+		inputHanler http.Handler
+		want
+	}{
+		{
+			"returns rpc error",
+			gtGoldenHTTPMock(commitHandlerMock(mockRPCError, blankHandler)),
+			want{
+				true,
+				"could not get commit",
+				"",
+			},
+		},
+		{
+			"fails to unmarshal",
+			gtGoldenHTTPMock(commitHandlerMock([]byte(`junk`), blankHandler)),
+			want{
+				true,
+				"could unmarshal commit",
+				"",
+			},
+		},
+		{
+			"is successful",
+			gtGoldenHTTPMock(commitHandlerMock(mockCommit, blankHandler)),
+			want{
+				false,
+				"",
+				goldenCommit,
+			},
+		},
+	}
 
-		bootstrap, err := gt.Bootstrap()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not get bootstrap"))
-		Expect(bootstrap).To(Equal(Bootstrap{}))
-	})
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.inputHanler)
+			defer server.Close()
 
-	It("fails to unmarshal", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(bootstrapHandlerMock([]byte(`junk`), blankHandler)))
-		defer server.Close()
+			gt, err := New(server.URL)
+			assert.Nil(t, err)
 
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
+			commit, err := gt.Commit()
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				assert.Contains(t, err.Error(), tt.want.containsErr)
+			} else {
+				assert.Nil(t, err)
+			}
 
-		bootstrap, err := gt.Bootstrap()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not unmarshal bootstrap"))
-		Expect(bootstrap).To(Equal(Bootstrap{}))
-	})
-
-	It("is successful", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(bootstrapHandlerMock(mockBootstrap, blankHandler)))
-		defer server.Close()
-
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
-
-		var want Bootstrap
-		json.Unmarshal(mockBootstrap, &want)
-
-		bootstrap, err := gt.Bootstrap()
-		Expect(err).To(Succeed())
-		Expect(bootstrap).To(Equal(want))
-	})
-})
-
-var _ = Describe("Commit", func() {
-	It("returns rpc error", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(commitHandlerMock(mockRPCError, blankHandler)))
-		defer server.Close()
-
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
-
-		commit, err := gt.Commit()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could not get commit"))
-		Expect(commit).To(Equal(""))
-	})
-
-	It("fails to unmarshal", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(commitHandlerMock([]byte(`junk`), blankHandler)))
-		defer server.Close()
-
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
-
-		commit, err := gt.Commit()
-		Expect(err).NotTo(Succeed())
-		Expect(err.Error()).To(MatchRegexp("could unmarshal commit"))
-		Expect(commit).To(Equal(""))
-	})
-
-	It("is successful", func() {
-		server := httptest.NewServer(gtGoldenHTTPMock(commitHandlerMock(mockCommit, blankHandler)))
-		defer server.Close()
-
-		gt, err := New(server.URL)
-		Expect(err).To(Succeed())
-
-		var want string
-		json.Unmarshal(mockCommit, &want)
-
-		commit, err := gt.Commit()
-		Expect(err).To(Succeed())
-		Expect(commit).To(Equal(want))
-	})
-})
+			assert.Equal(t, tt.want.wantCommit, commit)
+		})
+	}
+}

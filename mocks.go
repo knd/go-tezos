@@ -58,6 +58,10 @@ type blockMock struct {
 	used bool
 }
 
+func newBlockMock() *blockMock {
+	return &blockMock{}
+}
+
 func (b *blockMock) handler(resp []byte, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if regBlockURL.MatchString(r.URL.String()) && !b.used {
